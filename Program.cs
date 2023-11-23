@@ -8,21 +8,43 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Net.NetworkInformation;
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+
 
 namespace DataProcForWebApp
 {
+    public class ApplicationContext : DbContext
+    {
+        public DbSet<Movie> Movies => Set<Movie>();
+        public ApplicationContext() => Database.EnsureCreated();
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseSqlite("Data Source=helloapp.db");
+        }
+    }
+
+
+
     public class Movie
     {
-        public string tittle = "";
+        [Key]
+        public string tittle { get; set; }
         public Movie(string current_tittle)
         {
             tittle = current_tittle;
         }
 
-        public HashSet<string> actorsSet = new HashSet<string>();
-        public string director = "";
-        public HashSet<string> tagSet = new HashSet<string>();
-        public string movieRating = "";
+        public Movie()
+        {
+        }
+
+
+        //public HashSet<string> actorsSet = new HashSet<string>();
+        public string? director { get; set; }
+        //public HashSet<string> tagSet = new HashSet<string>();
+        public string? movieRating { get; set; }
 
     }
 
@@ -157,7 +179,7 @@ namespace DataProcForWebApp
                                 //которого мы будем далее менять
                                 bool flagForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                 if (categoryActors == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
-                                if (categoryActors == "actor") { currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
+                                //if (categoryActors == "actor") { currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
                                 // если такая пара уже есть, то к множеству фильмов надо добавить текущий фильм
@@ -270,7 +292,7 @@ namespace DataProcForWebApp
                                         //по айди тегу получаем название тега и доавбляем его в множество текущего фильма, а так же в словарь
                                         // тег - множество фильмов 
                                         bool flagForNameTag = dictionaryTagsId.TryGetValue(tagsId, out string nameTag);
-                                        currentMovie.tagSet.Add(nameTag);
+                                        //currentMovie.tagSet.Add(nameTag);
                                         output.AddOrUpdate(nameTag, new HashSet<Movie>() { currentMovie }, (existingKey, existingValue) =>
                                         {
                                             existingValue.Add(currentMovie);
@@ -375,7 +397,27 @@ namespace DataProcForWebApp
                 ts.Hours, ts.Minutes, ts.Seconds,
                 ts.Milliseconds / 10);
             Console.WriteLine("RunTime " + elapsedTime);
-            while (true)
+
+            using (ApplicationContext db = new ApplicationContext())
+            {
+                foreach (var t in allMoviesImdb)
+                {
+                    if (t.Value.director != null && t.Value.movieRating != null)
+                    {
+
+                        bool movieExists = db.Movies.Any(m => m.tittle == t.Value.tittle);
+
+                        if (!movieExists)
+                        {
+                            // Если фильма с таким tittle нет, добавляем его
+                            db.Movies.Add(t.Value);
+                        }
+                    }
+                }
+                db.SaveChanges();
+            }
+
+            while (false)
             {
                 Console.WriteLine("Выберите нужный вариант для Вас");
                 Console.WriteLine("a - распечатать инфмормацию о фильме");
@@ -396,8 +438,8 @@ namespace DataProcForWebApp
                         Console.WriteLine("Название этого фильма:" + " " + movie.tittle);
                         Console.WriteLine("Рейтинг этого фильма:" + " " + movie.movieRating);
                         Console.WriteLine("Режиссер этого фильма:" + " " + movie.director);
-                        Console.WriteLine("Актеры фильма" + " " + string.Join(", ", movie.actorsSet));
-                        Console.WriteLine("Теги фильма" + " " + string.Join(", ", movie.tagSet));
+                        //Console.WriteLine("Актеры фильма" + " " + string.Join(", ", movie.actorsSet));
+                        //Console.WriteLine("Теги фильма" + " " + string.Join(", ", movie.tagSet));
                     }
                     else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
                 }
