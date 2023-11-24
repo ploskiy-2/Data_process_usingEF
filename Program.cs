@@ -10,6 +10,7 @@ using System.Net.NetworkInformation;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using System.Numerics;
 
 
 namespace DataProcForWebApp
@@ -17,6 +18,9 @@ namespace DataProcForWebApp
     public class ApplicationContext : DbContext
     {
         public DbSet<Movie> Movies => Set<Movie>();
+        public DbSet<Human> Humans => Set<Human>();
+
+
         public ApplicationContext() => Database.EnsureCreated();
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -41,12 +45,40 @@ namespace DataProcForWebApp
         }
 
 
-        //public HashSet<string> actorsSet = new HashSet<string>();
+        //public HashSet<Actor> actorsSet { get; set; } = new HashSet<Actor>();
         public string? director { get; set; }
         //public HashSet<string> tagSet = new HashSet<string>();
         public string? movieRating { get; set; }
-
     }
+
+    public class Human
+    {
+        [Key]
+        public string name { get; set; }
+        public Human(string cur_name)
+        {
+            name = cur_name;
+        }
+        public Human()
+        {
+        }
+
+
+        //public HashSet<string> currentMovies { get; set; } = new HashSet<string>();
+    }
+
+
+
+    public class MovieActors
+    {
+        [Key]
+        public int Id { get; set; }
+        public string tittle { get; set; }
+        public string name { get; set; }
+        public Movie movie { get; set; }
+        public Human human { get; set; }
+    }
+
 
 
     /// This class will contain methods for processing web application data at different stages
@@ -179,7 +211,7 @@ namespace DataProcForWebApp
                                 //которого мы будем далее менять
                                 bool flagForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                 if (categoryActors == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
-                                //if (categoryActors == "actor") { currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
+                                if (categoryActors == "actor") { }//currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
                                 // если такая пара уже есть, то к множеству фильмов надо добавить текущий фильм
@@ -412,8 +444,42 @@ namespace DataProcForWebApp
                             // Если фильма с таким tittle нет, добавляем его
                             db.Movies.Add(t.Value);
                         }
+
+                        /*
+                        // Добавляем связанные люди (actorsSet) к фильму
+                        foreach (var actorName in t.Value.actorsSet)
+                        {
+                            Actor human = db.Humans.Find(actorName) ?? new Actor { name = actorName };
+                            db.Humans.Add(human);
+
+                            // Создаем связь между фильмом и человеком
+                           // t.Value.MovieActors.Add(new MovieActors { tittle = t.Value.tittle, name = human.name });
+                        }*/
                     }
                 }
+                                              
+                db.SaveChanges();
+            }
+            using (ApplicationContext db = new ApplicationContext())
+            {
+
+                foreach (var t in finallyActorsDirectorsDict)
+                {
+                    if (t.Key != null)
+                    {
+                        Human human = new Human(t.Key);
+                        bool actorExists = db.Humans.Any(m => m.name == human.name);
+
+                        if (!actorExists)
+                        {
+                            //Console.WriteLine($"{t.Key.name}");
+
+                            db.Humans.Add(human);
+                        }
+                    }
+                }
+
+
                 db.SaveChanges();
             }
 
@@ -449,12 +515,13 @@ namespace DataProcForWebApp
                     Console.WriteLine("Введите имя актера:");
                     string humanName = Console.ReadLine();
                     Console.WriteLine();
-                    bool flagForHumanMovie = finallyActorsDirectorsDict.TryGetValue(humanName, out var movieSet);
+                    /*bool flagForHumanMovie = finallyActorsDirectorsDict.TryGetValue(humanName, out var movieSet);
                     if (flagForHumanMovie)
                     {
                         Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", movieSet.Select(item => item.tittle)));
                     }
-                    else { Console.WriteLine("Этого человека нет в базе данных"); }
+                    else { Console.WriteLine("Этого человека нет в базе данных"); }*/
+                    Console.WriteLine("Данный метод в разработке");
                 }
                 if (variantChar == "c")
                 {
@@ -483,3 +550,8 @@ namespace DataProcForWebApp
 //Самотна звезда Каштанка
 //view askew 1081
 //Тусовщики из супермаркета tt0113749	180
+
+
+
+
+//проблема в том чтонадо проверять существует ли уже такой человек с таким именем и если сущемтвует то просто обращаться к нему а не создавать заново
