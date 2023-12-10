@@ -11,6 +11,8 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 
 namespace DataProcForWebApp
@@ -20,12 +22,16 @@ namespace DataProcForWebApp
         public DbSet<Movie> Movies => Set<Movie>();
         public DbSet<Human> Humans => Set<Human>();
 
+        public DbSet<Tag> Tags => Set<Tag>();
 
         public ApplicationContext() => Database.EnsureCreated();
+
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseSqlite("Data Source=helloapp.db");
+            optionsBuilder.EnableSensitiveDataLogging();
+
         }
     }
 
@@ -34,6 +40,7 @@ namespace DataProcForWebApp
     public class Movie
     {
         [Key]
+        public int id { get; set; }
         public string tittle { get; set; }
         public Movie(string current_tittle)
         {
@@ -44,16 +51,22 @@ namespace DataProcForWebApp
         {
         }
 
+        [NotMapped]
+        public HashSet<string> actorsSet = new HashSet<string>();
 
-        //public HashSet<Actor> actorsSet { get; set; } = new HashSet<Actor>();
+        public List<Human> actorsSetConnection { get; set; } = new List<Human>();
+        public List<Tag> tagssSetConnection { get; set; } = new List<Tag>();
         public string? director { get; set; }
-        //public HashSet<string> tagSet = new HashSet<string>();
+
+        [NotMapped]
+        public HashSet<string> tagSet = new HashSet<string>();
         public string? movieRating { get; set; }
     }
 
     public class Human
     {
         [Key]
+        public int id { get; set; }
         public string name { get; set; }
         public Human(string cur_name)
         {
@@ -62,24 +75,24 @@ namespace DataProcForWebApp
         public Human()
         {
         }
-
-
-        //public HashSet<string> currentMovies { get; set; } = new HashSet<string>();
+        public List<Movie> currentMoviesConnection { get; set; } = new List<Movie>();
     }
 
 
-
-    public class MovieActors
+    public class Tag
     {
         [Key]
-        public int Id { get; set; }
+        public int id { get; set; }
         public string tittle { get; set; }
-        public string name { get; set; }
-        public Movie movie { get; set; }
-        public Human human { get; set; }
+        public Tag(string cur_tittle)
+        {
+            tittle = cur_tittle;
+        }
+        public Tag()
+        {
+        }
+        public List<Movie> currentMoviesConnection { get; set; } = new List<Movie>();
     }
-
-
 
     /// This class will contain methods for processing web application data at different stages
     public static class PipelineStages
@@ -211,7 +224,9 @@ namespace DataProcForWebApp
                                 //которого мы будем далее менять
                                 bool flagForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                 if (categoryActors == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
-                                if (categoryActors == "actor") { }//currentMovie.actorsSet.Add(humansName); }//в список актеров фильма добавляем данного актера
+                                if (categoryActors == "actor") { 
+                                    currentMovie.actorsSet.Add(humansName); 
+                                }//в список актеров фильма добавляем данного актера
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
                                 // если такая пара уже есть, то к множеству фильмов надо добавить текущий фильм
@@ -432,54 +447,65 @@ namespace DataProcForWebApp
 
             using (ApplicationContext db = new ApplicationContext())
             {
+
                 foreach (var t in allMoviesImdb)
                 {
                     if (t.Value.director != null && t.Value.movieRating != null)
                     {
-
-                        bool movieExists = db.Movies.Any(m => m.tittle == t.Value.tittle);
-
-                        if (!movieExists)
-                        {
-                            // Если фильма с таким tittle нет, добавляем его
-                            db.Movies.Add(t.Value);
-                        }
-
-                        /*
-                        // Добавляем связанные люди (actorsSet) к фильму
+                        // кажется здесь можно не проверять, т.к. у нас allMoviesImdb - словарь
+                        db.Movies.Add(t.Value);
                         foreach (var actorName in t.Value.actorsSet)
                         {
-                            Actor human = db.Humans.Find(actorName) ?? new Actor { name = actorName };
-                            db.Humans.Add(human);
+                            if (actorName != null)
+                            {
+                                Human human = db.Humans.FirstOrDefault(args => args.name == actorName);
+                                if (human != null)
+                                {
+                                    try
+                                    {
+                                        t.Value.actorsSetConnection.Add(human);
+                                        human.currentMoviesConnection.Add(t.Value);
+                                    }
+                                    catch
+                                    {
+                                        Console.WriteLine("error1");
+                                    }
 
-                            // Создаем связь между фильмом и человеком
-                           // t.Value.MovieActors.Add(new MovieActors { tittle = t.Value.tittle, name = human.name });
-                        }*/
-                    }
-                }
-                                              
-                db.SaveChanges();
-            }
-            using (ApplicationContext db = new ApplicationContext())
-            {
 
-                foreach (var t in finallyActorsDirectorsDict)
-                {
-                    if (t.Key != null)
-                    {
-                        Human human = new Human(t.Key);
-                        bool actorExists = db.Humans.Any(m => m.name == human.name);
 
-                        if (!actorExists)
-                        {
-                            //Console.WriteLine($"{t.Key.name}");
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        human = new Human(actorName);
+                                        t.Value.actorsSetConnection.Add(human);
+                                        human.currentMoviesConnection.Add(t.Value);
+                                    }
+                                    catch
+                                    {
+                                        Console.WriteLine("erro2");
+                                    }
 
-                            db.Humans.Add(human);
+                                }
+                            }
                         }
+
                     }
                 }
 
 
+                //получаю ключи словаря актеров 
+                var dictionaryKeys = finallyActorsDirectorsDict.Keys.ToList();
+
+                //получаю список актеров которые не принимали участия ни в одном из фильмов 
+                var keysNotInDatabase = dictionaryKeys.Except(db.Humans.Select(e => e.name)).ToList();
+
+                foreach (var t in keysNotInDatabase)
+                {     
+                    Human human= new Human(t);
+                    db.Humans.Add(human);
+                }
                 db.SaveChanges();
             }
 

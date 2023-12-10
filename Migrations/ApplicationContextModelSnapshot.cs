@@ -18,10 +18,15 @@ namespace DataBaseForMovie.Migrations
 
             modelBuilder.Entity("DataProcForWebApp.Human", b =>
                 {
+                    b.Property<int>("id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("name")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.HasKey("name");
+                    b.HasKey("id");
 
                     b.ToTable("Humans");
                 });
@@ -40,6 +45,36 @@ namespace DataBaseForMovie.Migrations
                     b.HasKey("tittle");
 
                     b.ToTable("Movies");
+                });
+
+            modelBuilder.Entity("HumanMovie", b =>
+                {
+                    b.Property<int>("actorsSetConnectionid")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("currentMoviesConnectiontittle")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("actorsSetConnectionid", "currentMoviesConnectiontittle");
+
+                    b.HasIndex("currentMoviesConnectiontittle");
+
+                    b.ToTable("HumanMovie");
+                });
+
+            modelBuilder.Entity("HumanMovie", b =>
+                {
+                    b.HasOne("DataProcForWebApp.Human", null)
+                        .WithMany()
+                        .HasForeignKey("actorsSetConnectionid")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DataProcForWebApp.Movie", null)
+                        .WithMany()
+                        .HasForeignKey("currentMoviesConnectiontittle")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
