@@ -180,7 +180,6 @@ namespace DataProcForWebApp
 
                         string codActore = line.Substring(0, tab1);
                         string nameActor = line.Substring(tab1 + 1, tab2 - tab1 - 1);
-                        //string[] columns = line.Split(new char[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
                         { output.AddOrUpdate(codActore, nameActor, (existingKey, existingValue) => existingValue); }
                     }
                 }
@@ -339,7 +338,7 @@ namespace DataProcForWebApp
                                         //по айди тегу получаем название тега и доавбляем его в множество текущего фильма, а так же в словарь
                                         // тег - множество фильмов 
                                         bool flagForNameTag = dictionaryTagsId.TryGetValue(tagsId, out string nameTag);
-                                        //currentMovie.tagSet.Add(nameTag);
+                                        currentMovie.tagSet.Add(nameTag);
                                         output.AddOrUpdate(nameTag, new HashSet<Movie>() { currentMovie }, (existingKey, existingValue) =>
                                         {
                                             existingValue.Add(currentMovie);
@@ -490,7 +489,39 @@ namespace DataProcForWebApp
                                 }
                             }
                         }
+                        foreach (var tagTittle in t.Value.tagSet)
+                        {
+                            if (tagTittle != null)
+                            {
+                                Tag tag = db.Tags.FirstOrDefault(args => args.tittle == tagTittle);
+                                if (tag != null)
+                                {
+                                    try
+                                    {
+                                        t.Value.tagssSetConnection.Add(tag);
+                                        tag.currentMoviesConnection.Add(t.Value);
+                                    }
+                                    catch
+                                    {
+                                        Console.WriteLine("error1");
+                                    }
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        tag = new Tag(tagTittle);
+                                        t.Value.tagssSetConnection.Add(tag);
+                                        tag.currentMoviesConnection.Add(t.Value);
+                                    }
+                                    catch
+                                    {
+                                        Console.WriteLine("erro2");
+                                    }
 
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -506,6 +537,19 @@ namespace DataProcForWebApp
                     Human human= new Human(t);
                     db.Humans.Add(human);
                 }
+
+                //получаю ключи словаря тегов 
+                var dictionaryKeysTags = finallyTagsDictionary.Keys.ToList();
+
+                //получаю список тегов которых нет ни в одном фильме
+                var keysTagsNotInDatabase = dictionaryKeysTags.Except(db.Tags.Select(e => e.tittle)).ToList();
+
+                foreach (var t in keysTagsNotInDatabase)
+                {
+                    Tag tag = new Tag(t);
+                    db.Tags.Add(tag);
+                }
+
                 db.SaveChanges();
             }
 
