@@ -1,0 +1,25 @@
+# .gitignore
+
+# Ignore compiled files
+*.dll
+*.exe
+
+# Ignore database files
+*.db
+*.db-shm
+*.db-wal
+
+# Ignore logs
+*.log
+
+# Ignore Visual Studio files
+.vscode/
+*.suo
+*.ntvs*
+*.nupkg
+*.pfx
+*.snk
+
+bin/
+obj/
+*.db
