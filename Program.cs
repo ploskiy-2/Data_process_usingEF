@@ -52,6 +52,10 @@ namespace DataProcForWebApp
         [NotMapped]
         public HashSet<string> actorsSet = new HashSet<string>();
 
+        //потенциально похожие фильмы
+        [NotMapped]
+        public ConcurrentDictionary<Movie, double> potentialSimilaryMovie { get; set; }  = new ConcurrentDictionary<Movie, double>();
+
         public List<Human> actorsSetConnection { get; set; } = new List<Human>();
         public List<Tag> tagssSetConnection { get; set; } = new List<Tag>();
         public string? director { get; set; }
@@ -158,9 +162,6 @@ namespace DataProcForWebApp
                 }
             }, TaskCreationOptions.LongRunning);/// report that this is long running task
         }
-
-
-
 
         //получаем по кодам людей их имя
         public static Task ReceiveActorsAndDirectorsNamesAsync(string filename, ConcurrentDictionary<string, string> output)
@@ -357,7 +358,7 @@ namespace DataProcForWebApp
     {
         static async Task Main(string[] args)
         {
-           // await Parsing();
+            await Parsing();
             while (true)
             {
                 Console.WriteLine("Выберите нужный вариант для Вас");
@@ -390,6 +391,10 @@ namespace DataProcForWebApp
                             Console.WriteLine("Режиссер этого фильма:" + " " + movie.director);
                             Console.WriteLine("Актеры фильма" + " " + string.Join(", ", actorNames));
                             Console.WriteLine("Теги фильма" + " " + string.Join(", ", moviesWithTags));
+
+                            Console.WriteLine();
+                            Console.WriteLine("10 похожих фильмов: ");
+                            Console.WriteLine(string.Join(", ", movie.potentialSimilaryMovie.Keys + " " + movie.potentialSimilaryMovie.Values)); 
                         }
                         else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
                     }
@@ -439,10 +444,7 @@ namespace DataProcForWebApp
                     }
                     Console.WriteLine();
                 }
-            }
-
-
-           
+            }          
         }    
         static async Task Parsing()
         {
@@ -531,7 +533,7 @@ namespace DataProcForWebApp
                     ts.Hours, ts.Minutes, ts.Seconds,
                     ts.Milliseconds / 10);
                 Console.WriteLine("RunTime " + elapsedTime);
-
+                /*
                 using (ApplicationContext db = new ApplicationContext())
                 {
 
@@ -558,6 +560,8 @@ namespace DataProcForWebApp
                                             Console.WriteLine("erro2");
                                         }
                                     }
+                                    //добавляю в рейтинг похожестви фильмов для t.value фильмы и оценки
+                                    
                                     t.Value.actorsSetConnection.Add(human);
                                     human.currentMoviesConnection.Add(t.Value);
                                 }
@@ -634,6 +638,58 @@ namespace DataProcForWebApp
 
                     db.SaveChanges();
                 }
+                */
+
+
+                //идея для сравнения фильмов: давайте если у фильмов одинаковые режиссеры то добавляем к рейтингу схожести 0,05
+                //если одинаковый актер то +0,025, если одинаковый тег, то +0,01, затем в конце выбрать min{0.5, сумма добавок}
+                foreach (var movie in allMoviesImdb)
+                {
+
+                    foreach (var actor in movie.Value.actorsSet)
+                    {
+                        //получаем список фильмов данного актера (который принял участие в этом фильме
+                        HashSet<Movie> actorMovies = finallyActorsDirectorsDict.FirstOrDefault(t => t.Key == actor).Value;
+                        foreach (var mov in  actorMovies)
+                        {
+                            //в список потенциально похожих фильмов добавляем новый, если его нет + оценку начальнуб
+                            // пытаемся создать такую пару ключ-значение
+                            // если такая пара уже есть, то меняем оценку
+                            movie.Value.potentialSimilaryMovie.AddOrUpdate(mov , 0.025 , (existingKey, existingValue) =>
+                            {
+                                existingValue+=0.025;
+                                return existingValue;
+                            });
+                        }
+                    }
+
+
+                    foreach (var tag in movie.Value.tagSet)
+                    {
+                        //получаем список фильмов данного тега 
+                        HashSet<Movie> tagMovies = finallyTagsDictionary.FirstOrDefault(t => t.Key == tag).Value;
+                        foreach (var mov in tagMovies)
+                        {
+                            //в список потенциально похожих фильмов добавляем новый, если его нет + оценку начальнуб
+                            // пытаемся создать такую пару ключ-значение
+                            // если такая пара уже есть, то меняем оценку
+                            movie.Value.potentialSimilaryMovie.AddOrUpdate(mov, 0.01, (existingKey, existingValue) =>
+                            {
+                                existingValue += 0.01;
+                                return existingValue;
+                            });
+                        }
+                    }
+                
+                
+                    foreach (var simMovie in movie.Value.potentialSimilaryMovie) 
+                    {
+                        movie.Value.potentialSimilaryMovie[simMovie.Key] = Math.Min(0.5, simMovie.Value);
+                    }
+                
+                        
+                }
+            
             }
         } 
     }
