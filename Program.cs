@@ -385,23 +385,29 @@ namespace DataProcForWebApp
                         var movie = db.Movies.FirstOrDefault(m => m.tittle == tittleMovie);
                         if (movie != null)
                         {
-                            var actorNames = from mov in db.Movies
-                                             where mov.tittle == tittleMovie
-                                             from ac in mov.actorsSetConnection
-                                             select ac;
-                            var tagTittles = from mov in db.Movies
-                                                 where mov.tittle == tittleMovie
-                                                 from tag in mov.tagssSetConnection
-                                                 select tag;
+                            // Assuming you're using EF Core
+                            var actorNames = await db.Movies
+                                .Include(t => t.actorsSetConnection)
+                                .Where(mov => mov.tittle == tittleMovie)
+                                .SelectMany(mov => mov.actorsSetConnection)
+                                .ToListAsync();
+                            var tagTittles = db.Movies
+                                .Include(t => t.tagssSetConnection)
+                                .Where(mov => mov.tittle == tittleMovie)
+                                .AsParallel()
+                                .SelectMany(mov => mov.tagssSetConnection)
+                                .ToList();
+
                             Console.WriteLine("Название этого фильма:" + " " + movie.tittle);
                             Console.WriteLine("Рейтинг этого фильма:" + " " + movie.movieRating);
                             Console.WriteLine("Режиссер этого фильма:" + " " + movie.director);
 
-                            string moviesactorNames = "";
+                            var actorNamesStringBuilder = new StringBuilder();
                             foreach (var t in actorNames)
                             {
-                                moviesactorNames += t.name + " ";
+                                actorNamesStringBuilder.Append(t.name).Append(" ");
                             }
+                            string moviesactorNames = actorNamesStringBuilder.ToString();
 
                             Console.WriteLine("Актеры фильма" + " " + moviesactorNames);
                             
@@ -415,11 +421,11 @@ namespace DataProcForWebApp
 
                             Console.WriteLine();
                             Console.WriteLine("10 похожих фильмов: ");
-                            /*Dictionary<string, double> similaryMovies = GetSimilaryMovies(movie,actorNames,tagTittles, db);
+                            Dictionary<string, double> similaryMovies = GetSimilaryMovies(movie,actorNames,tagTittles, db);
                             foreach (var t in similaryMovies)
                             {
-                               // Console.WriteLine(string.Join(", ", t.Key + " " + t.Value + " " + "схожести"));
-                            }*/
+                               Console.WriteLine(string.Join(", ", t.Key + " " + t.Value + " " + "схожести"));
+                            }
                         }
                         else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
                     }
@@ -432,17 +438,13 @@ namespace DataProcForWebApp
                         Console.WriteLine("Введите имя актера:");
                         string humanName = Console.ReadLine();
                         Console.WriteLine();
-                        /*
-                        var human = from human in db.Humans
+                        var moviesTitles = from human in db.Humans
                                            where human.name == humanName
                                            from movie in human.currentMoviesConnection
-                                           select movie.tittle;*/
-                        var hum = db.Humans.FirstOrDefault(p => p.name==humanName);
-                        if (hum!=null)
+                                           select movie.tittle;
+                        if (moviesTitles.Count() > 0)
                         {
-                            
-                            Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", 
-                                from t in hum.currentMoviesConnection select t.tittle));
+                            Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", moviesTitles));
                         }
                         else
                         {
@@ -481,33 +483,40 @@ namespace DataProcForWebApp
         //идея для сравнения фильмов: давайте если у фильмов одинаковые режиссеры то добавляем к рейтингу схожести 0,05
         //если одинаковый актер то +0,025, если одинаковый тег, то +0,01, затем в конце выбрать min{0.5, сумма добавок}
             Dictionary<string, double> rankedSimilaryMovie = new Dictionary<string, double>();
-            foreach (var actor in actorMovies)
+            var newActorsMovies = db.Humans.Include(b => b.currentMoviesConnection).Where(hum => actorMovies.Contains(hum));
+                                   
+            foreach (var actor in newActorsMovies)
             {
                 //получаем список фильмов данного актера (который принял участие в этом фильме
-                var t = db.Humans.Where(t => t.name == actor.name);
-                foreach (var a in t) 
-                {
-                    currentMovie.potentialSimilaryMovie.UnionWith(a.currentMoviesConnection.Select(m => m.tittle));
-                    Console.WriteLine(a.currentMoviesConnection.Count());
-                }
-                //Console.WriteLine(t.First().name + " " + t.Count());
+                currentMovie.potentialSimilaryMovie.UnionWith(actor.currentMoviesConnection.Select(t => t.tittle));
             };
-            //Console.WriteLine(currentMovie.potentialSimilaryMovie.Count);
+            var newTagsMovies = db.Tags.Include(b => b.currentMoviesConnection).Where(hum => tagMovies.Contains(hum));
+
             foreach (var tag in tagMovies)
             {
                 //получаем список фильмов данного тега 
-                foreach (var a in db.Tags.Where(t => t.tittle == tag.tittle))
-                {
-                    currentMovie.potentialSimilaryMovie.UnionWith(a.currentMoviesConnection.Select(m => m.tittle));
-                }
+                currentMovie.potentialSimilaryMovie.UnionWith(tag.currentMoviesConnection.Select(m => m.tittle)); 
             };
             currentMovie.potentialSimilaryMovie.Remove(currentMovie.tittle);
+
+
+            var newMoviesActors = db.Movies.Include(b => b.actorsSetConnection).Where(hum => currentMovie.potentialSimilaryMovie.Contains(hum.tittle));
+            var newMoviesTags = db.Movies.Include(b => b.tagssSetConnection).Where(hum => currentMovie.potentialSimilaryMovie.Contains(hum.tittle));
+            newMoviesTags.Union(newMoviesActors);
             foreach (var simMovie in currentMovie.potentialSimilaryMovie)
             {
                 double rank = 0;
-                var compareMovie = db.Movies.FirstOrDefault(m => m.tittle == simMovie);
-                HashSet<string> commonActorMovie = new HashSet<string>(compareMovie.actorsSet);
-                HashSet<string> commonTagMovie = new HashSet<string>(compareMovie.tagSet);
+                var compareMovie1 = newMoviesTags.FirstOrDefault(m => m.tittle == simMovie);
+                HashSet<string> commonActorMovie = new HashSet<string>();
+                HashSet<string> commonTagMovie = new HashSet<string>();
+                foreach (var ttt in compareMovie1.actorsSetConnection)
+                {
+                    commonActorMovie.Add(ttt.name);
+                }
+                foreach (var ttt in compareMovie1.tagssSetConnection)
+                {
+                    commonTagMovie.Add(ttt.tittle);
+                }
 
                 commonActorMovie.Intersect(currentMovie.actorsSet);
                 commonTagMovie.Intersect(currentMovie.tagSet);
@@ -515,15 +524,13 @@ namespace DataProcForWebApp
                 var t = commonActorMovie.Count;
                 var tt = commonTagMovie.Count;
 
-                if ((compareMovie.director == currentMovie.director))
-                {
+                if ((compareMovie1.director == currentMovie.director))
+                { 
                     rank = 0.05;
                 }
-                rank = Math.Min(rank + t * 0.025 + tt * 0.01, 0.5);
+                rank = Math.Min(rank + t * 0.01 + tt * 0.001, 0.5);
                 rankedSimilaryMovie.Add(simMovie, rank);
-                //Console.WriteLine(simMovie + " ---- " + rank);
             };
-
             var sortedDictMovies = from mov in rankedSimilaryMovie orderby mov.Value descending select mov;
             return sortedDictMovies.Take(10).ToDictionary();
             
