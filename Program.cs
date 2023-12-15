@@ -13,6 +13,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using System.Formats.Tar;
 
 
 namespace DataProcForWebApp
@@ -54,7 +57,7 @@ namespace DataProcForWebApp
 
         //потенциально похожие фильмы
         [NotMapped]
-        public ConcurrentDictionary<Movie, double> potentialSimilaryMovie { get; set; }  = new ConcurrentDictionary<Movie, double>();
+        public HashSet<string> potentialSimilaryMovie = new HashSet<string>();
 
         public List<Human> actorsSetConnection { get; set; } = new List<Human>();
         public List<Tag> tagssSetConnection { get; set; } = new List<Tag>();
@@ -77,7 +80,7 @@ namespace DataProcForWebApp
         public Human()
         {
         }
-        public List<Movie> currentMoviesConnection { get; set; } = new List<Movie>();
+        public HashSet<Movie> currentMoviesConnection { get; set; } = new HashSet<Movie>();
     }
 
 
@@ -93,7 +96,7 @@ namespace DataProcForWebApp
         public Tag()
         {
         }
-        public List<Movie> currentMoviesConnection { get; set; } = new List<Movie>();
+        public HashSet<Movie> currentMoviesConnection { get; set; } = new HashSet<Movie>();
     }
 
     /// This class will contain methods for processing web application data at different stages
@@ -222,8 +225,9 @@ namespace DataProcForWebApp
                                 //которого мы будем далее менять
                                 bool flagForMovie = allMovies.TryGetValue(movieTittle, out Movie currentMovie);
                                 if (categoryActors == "director") { currentMovie.director = humansName; }//пытаемся добавить режиссера
-                                if (categoryActors == "actor") { 
-                                    currentMovie.actorsSet.Add(humansName); 
+                                if (categoryActors == "actor")
+                                {
+                                    currentMovie.actorsSet.Add(humansName);
                                 }//в список актеров фильма добавляем данного актера
                                 //в словарь где ключом является имя человека, а значение это множество фильмо где он принял участие
                                 // пытаемся создать такую пару ключ-значение
@@ -358,7 +362,7 @@ namespace DataProcForWebApp
     {
         static async Task Main(string[] args)
         {
-            await Parsing();
+            //await Parsing();
             while (true)
             {
                 Console.WriteLine("Выберите нужный вариант для Вас");
@@ -378,23 +382,44 @@ namespace DataProcForWebApp
                         string tittleMovie = Console.ReadLine();
                         Console.WriteLine();
 
-                        var movie = db.Movies.Include(m => m.actorsSetConnection).FirstOrDefault(m => m.tittle == tittleMovie);                                              
+                        var movie = db.Movies.FirstOrDefault(m => m.tittle == tittleMovie);
                         if (movie != null)
                         {
-                            var actorNames = movie.actorsSetConnection.ToList().Select(actor => actor.name);
-                            var moviesWithTags = from mov in db.Movies
+                            var actorNames = from mov in db.Movies
+                                             where mov.tittle == tittleMovie
+                                             from ac in mov.actorsSetConnection
+                                             select ac;
+                            var tagTittles = from mov in db.Movies
                                                  where mov.tittle == tittleMovie
                                                  from tag in mov.tagssSetConnection
-                                                 select tag.tittle;
+                                                 select tag;
                             Console.WriteLine("Название этого фильма:" + " " + movie.tittle);
                             Console.WriteLine("Рейтинг этого фильма:" + " " + movie.movieRating);
                             Console.WriteLine("Режиссер этого фильма:" + " " + movie.director);
-                            Console.WriteLine("Актеры фильма" + " " + string.Join(", ", actorNames));
-                            Console.WriteLine("Теги фильма" + " " + string.Join(", ", moviesWithTags));
+
+                            string moviesactorNames = "";
+                            foreach (var t in actorNames)
+                            {
+                                moviesactorNames += t.name + " ";
+                            }
+
+                            Console.WriteLine("Актеры фильма" + " " + moviesactorNames);
+                            
+                            string moviesWithTags = "";
+                            foreach (var t in tagTittles)
+                            {
+                                moviesWithTags += t.tittle + " ";
+                            }
+                            Console.WriteLine("Теги фильма" + " " + moviesWithTags);
+                            
 
                             Console.WriteLine();
                             Console.WriteLine("10 похожих фильмов: ");
-                            Console.WriteLine(string.Join(", ", movie.potentialSimilaryMovie.Keys + " " + movie.potentialSimilaryMovie.Values)); 
+                            /*Dictionary<string, double> similaryMovies = GetSimilaryMovies(movie,actorNames,tagTittles, db);
+                            foreach (var t in similaryMovies)
+                            {
+                               // Console.WriteLine(string.Join(", ", t.Key + " " + t.Value + " " + "схожести"));
+                            }*/
                         }
                         else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
                     }
@@ -407,13 +432,17 @@ namespace DataProcForWebApp
                         Console.WriteLine("Введите имя актера:");
                         string humanName = Console.ReadLine();
                         Console.WriteLine();
-                        var moviesTitles = from human in db.Humans
+                        /*
+                        var human = from human in db.Humans
                                            where human.name == humanName
-                                           from movie in human.currentMoviesConnection                                           
-                                           select movie.tittle;
-                        if (moviesTitles.Count()>0)
+                                           from movie in human.currentMoviesConnection
+                                           select movie.tittle;*/
+                        var hum = db.Humans.FirstOrDefault(p => p.name==humanName);
+                        if (hum!=null)
                         {
-                            Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", moviesTitles));
+                            
+                            Console.WriteLine("Фильмы, в которых он/она принял/а участие:" + " " + string.Join(", ", 
+                                from t in hum.currentMoviesConnection select t.tittle));
                         }
                         else
                         {
@@ -436,7 +465,7 @@ namespace DataProcForWebApp
                                                from movie in tag.currentMoviesConnection
                                                select movie.tittle;
 
-                        if (moviesTitlesTags.Count()>0)
+                        if (moviesTitlesTags.Count() > 0)
                         {
                             Console.WriteLine("Фильмы, помеченные данным тегом:" + " " + string.Join(", ", moviesTitlesTags));
                         }
@@ -444,8 +473,61 @@ namespace DataProcForWebApp
                     }
                     Console.WriteLine();
                 }
-            }          
-        }    
+            }
+        }
+
+        static Dictionary<string, double> GetSimilaryMovies(Movie currentMovie, IEnumerable<Human> actorMovies, IEnumerable<Tag> tagMovies, ApplicationContext db)
+        {
+        //идея для сравнения фильмов: давайте если у фильмов одинаковые режиссеры то добавляем к рейтингу схожести 0,05
+        //если одинаковый актер то +0,025, если одинаковый тег, то +0,01, затем в конце выбрать min{0.5, сумма добавок}
+            Dictionary<string, double> rankedSimilaryMovie = new Dictionary<string, double>();
+            foreach (var actor in actorMovies)
+            {
+                //получаем список фильмов данного актера (который принял участие в этом фильме
+                var t = db.Humans.Where(t => t.name == actor.name);
+                foreach (var a in t) 
+                {
+                    currentMovie.potentialSimilaryMovie.UnionWith(a.currentMoviesConnection.Select(m => m.tittle));
+                    Console.WriteLine(a.currentMoviesConnection.Count());
+                }
+                //Console.WriteLine(t.First().name + " " + t.Count());
+            };
+            //Console.WriteLine(currentMovie.potentialSimilaryMovie.Count);
+            foreach (var tag in tagMovies)
+            {
+                //получаем список фильмов данного тега 
+                foreach (var a in db.Tags.Where(t => t.tittle == tag.tittle))
+                {
+                    currentMovie.potentialSimilaryMovie.UnionWith(a.currentMoviesConnection.Select(m => m.tittle));
+                }
+            };
+            currentMovie.potentialSimilaryMovie.Remove(currentMovie.tittle);
+            foreach (var simMovie in currentMovie.potentialSimilaryMovie)
+            {
+                double rank = 0;
+                var compareMovie = db.Movies.FirstOrDefault(m => m.tittle == simMovie);
+                HashSet<string> commonActorMovie = new HashSet<string>(compareMovie.actorsSet);
+                HashSet<string> commonTagMovie = new HashSet<string>(compareMovie.tagSet);
+
+                commonActorMovie.Intersect(currentMovie.actorsSet);
+                commonTagMovie.Intersect(currentMovie.tagSet);
+
+                var t = commonActorMovie.Count;
+                var tt = commonTagMovie.Count;
+
+                if ((compareMovie.director == currentMovie.director))
+                {
+                    rank = 0.05;
+                }
+                rank = Math.Min(rank + t * 0.025 + tt * 0.01, 0.5);
+                rankedSimilaryMovie.Add(simMovie, rank);
+                //Console.WriteLine(simMovie + " ---- " + rank);
+            };
+
+            var sortedDictMovies = from mov in rankedSimilaryMovie orderby mov.Value descending select mov;
+            return sortedDictMovies.Take(10).ToDictionary();
+            
+        }
         static async Task Parsing()
         {
             {
@@ -533,173 +615,48 @@ namespace DataProcForWebApp
                     ts.Hours, ts.Minutes, ts.Seconds,
                     ts.Milliseconds / 10);
                 Console.WriteLine("RunTime " + elapsedTime);
-                /*
+                
+
+          
                 using (ApplicationContext db = new ApplicationContext())
-                {
-
-                    foreach (var t in allMoviesImdb)
+                {                   
+                    await db.Movies.AddRangeAsync(allMoviesImdb.Values);
+                    foreach (var h in finallyActorsDirectorsDict)
                     {
-                        if (t.Value.director != null && t.Value.movieRating != null)
-                        {
-                            // кажется здесь можно не проверять, т.к. у нас allMoviesImdb - словарь
-                            db.Movies.Add(t.Value);
-                            foreach (var actorName in t.Value.actorsSet)
-                            {
-                                if (actorName != null)
-                                {
-                                    Human human = db.Humans.FirstOrDefault(args => args.name == actorName);
-                                    if (human == null)
-                                    {                                       
-                                        try
-                                        {
-                                            human = new Human(actorName);
-                                            db.Humans.Add(human);
-                                        }
-                                        catch
-                                        {
-                                            Console.WriteLine("erro2");
-                                        }
-                                    }
-                                    //добавляю в рейтинг похожестви фильмов для t.value фильмы и оценки
-                                    
-                                    t.Value.actorsSetConnection.Add(human);
-                                    human.currentMoviesConnection.Add(t.Value);
-                                }
-                            }
-                            foreach (var tagTittle in t.Value.tagSet)
-                            {
-                                if (tagTittle != null)
-                                {
-                                    Tag tag = db.Tags.FirstOrDefault(args => args.tittle == tagTittle);
-                                    if (tag != null)
-                                    {
-                                        try
-                                        {
-                                            t.Value.tagssSetConnection.Add(tag);
-                                            tag.currentMoviesConnection.Add(t.Value);
-                                        }
-                                        catch
-                                        {
-                                            Console.WriteLine("error1");
-                                        }
-                                    }
-                                    else
-                                    {
-                                        try
-                                        {
-                                            tag = new Tag(tagTittle);
-                                            db.Tags.Add(tag);
-                                            t.Value.tagssSetConnection.Add(tag);
-                                            tag.currentMoviesConnection.Add(t.Value);
-                                        }
-                                        catch
-                                        {
-                                            Console.WriteLine("error2");
-                                        }
-
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-
-                    //получаю ключи словаря актеров 
-                    var dictionaryKeys = finallyActorsDirectorsDict.Keys.ToList();
-
-                    //получаю список актеров которые не принимали участия ни в одном из фильмов 
-                    var keysNotInDatabase = dictionaryKeys.Except(db.Humans.Select(e => e.name)).ToList();
-
-                    foreach (var t in keysNotInDatabase)
-                    {
-                        Human human = db.Humans.FirstOrDefault(args => args.name == t);
-                        if (human == null)
-                        {
-                            human = new Human(t);
+                        if (h.Key != null)
+                        {                            
+                            Human human = new Human(h.Key);
                             db.Humans.Add(human);
+                            //addHumanRecordYet.Add(human);
+                            
+                            foreach (var m in h.Value)
+                            {
+                                m.actorsSetConnection.Add(human);
+                                human.currentMoviesConnection.Add(m);
+                            }                        
                         }
-                    }
+                    };
 
-                    //получаю ключи словаря тегов 
-                    var dictionaryKeysTags = finallyTagsDictionary.Keys.ToList();
-
-                    //получаю список тегов которых нет ни в одном фильме
-                    var keysTagsNotInDatabase = dictionaryKeysTags.Except(db.Tags.Select(e => e.tittle)).ToList();
-
-                    foreach (var t in keysTagsNotInDatabase)
+                    foreach (var t in finallyTagsDictionary)
                     {
-                        Tag tag = db.Tags.FirstOrDefault(args => args.tittle == t);
-                        if (tag == null)
+                        if (t.Key != null)
                         {
-                            tag = new Tag(t);
+                            Tag tag =  new Tag(t.Key);
                             db.Tags.Add(tag);
-                        }
-                    }
-
-                    db.SaveChanges();
-                }
-                */
-
-
-                //идея для сравнения фильмов: давайте если у фильмов одинаковые режиссеры то добавляем к рейтингу схожести 0,05
-                //если одинаковый актер то +0,025, если одинаковый тег, то +0,01, затем в конце выбрать min{0.5, сумма добавок}
-                foreach (var movie in allMoviesImdb)
-                {
-
-                    foreach (var actor in movie.Value.actorsSet)
-                    {
-                        //получаем список фильмов данного актера (который принял участие в этом фильме
-                        HashSet<Movie> actorMovies = finallyActorsDirectorsDict.FirstOrDefault(t => t.Key == actor).Value;
-                        foreach (var mov in  actorMovies)
-                        {
-                            //в список потенциально похожих фильмов добавляем новый, если его нет + оценку начальнуб
-                            // пытаемся создать такую пару ключ-значение
-                            // если такая пара уже есть, то меняем оценку
-                            movie.Value.potentialSimilaryMovie.AddOrUpdate(mov , 0.025 , (existingKey, existingValue) =>
+                           // addTagRecordYet.Add(tag);
+                            
+                            foreach (var m in t.Value)
                             {
-                                existingValue+=0.025;
-                                return existingValue;
-                            });
+                                m.tagssSetConnection.Add(tag);
+                                tag.currentMoviesConnection.Add(m);
+                            }
                         }
-                    }
-
-
-                    foreach (var tag in movie.Value.tagSet)
-                    {
-                        //получаем список фильмов данного тега 
-                        HashSet<Movie> tagMovies = finallyTagsDictionary.FirstOrDefault(t => t.Key == tag).Value;
-                        foreach (var mov in tagMovies)
-                        {
-                            //в список потенциально похожих фильмов добавляем новый, если его нет + оценку начальнуб
-                            // пытаемся создать такую пару ключ-значение
-                            // если такая пара уже есть, то меняем оценку
-                            movie.Value.potentialSimilaryMovie.AddOrUpdate(mov, 0.01, (existingKey, existingValue) =>
-                            {
-                                existingValue += 0.01;
-                                return existingValue;
-                            });
-                        }
-                    }
-                
-                
-                    foreach (var simMovie in movie.Value.potentialSimilaryMovie) 
-                    {
-                        movie.Value.potentialSimilaryMovie[simMovie.Key] = Math.Min(0.5, simMovie.Value);
-                    }
-                
-                        
-                }
-            
+                    };
+                  
+                    await db.SaveChangesAsync();
+                }              
             }
-        } 
+        }
     }
 }
-//Выход Рипа и гнома
-//Stanley Kubrick
-//Leonardo DiCaprio
-//Выживший
-//Morgan Freeman Ron Howard Natalie Portman Gary Oldman Al Pacino
-//Самотна звезда Каштанка
-//view askew 1081
-//Тусовщики из супермаркета tt0113749	180
 
