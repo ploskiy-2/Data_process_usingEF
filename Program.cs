@@ -424,7 +424,7 @@ namespace DataProcForWebApp
                             Dictionary<string, double> similaryMovies = GetSimilaryMovies(movie,actorNames,tagTittles, db);
                             foreach (var t in similaryMovies)
                             {
-                               Console.WriteLine(string.Join(", ", t.Key + " " + t.Value + " " + "схожести"));
+                               Console.WriteLine(string.Join(", ", t.Key + " ---- " + t.Value + "  " + "схожести"));
                             }
                         }
                         else { Console.WriteLine("Этого фильма нет в базе данных/Этот фильм не на русском/английском"); }
@@ -529,7 +529,15 @@ namespace DataProcForWebApp
                     rank = 0.05;
                 }
                 rank = Math.Min(rank + t * 0.01 + tt * 0.001, 0.5);
-                rankedSimilaryMovie.Add(simMovie, rank);
+                if (compareMovie1.movieRating != null)
+                {
+                    rankedSimilaryMovie.Add(simMovie, rank + 0.05*Convert.ToDouble(compareMovie1.movieRating.Replace('.', ',')));
+                }
+                else
+                {
+                    rankedSimilaryMovie.Add(simMovie, rank);
+
+                }
             };
             var sortedDictMovies = from mov in rankedSimilaryMovie orderby mov.Value descending select mov;
             return sortedDictMovies.Take(10).ToDictionary();
